@@ -26,7 +26,13 @@ const {
   LOG_CHANNEL_ID,
 } = process.env;
 
-if (!DISCORD_TOKEN || !DISCORD_CLIENT_ID || !DISCORD_GUILD_ID || !MEMBER_ROLE_ID || !RULES_CHANNEL_ID) {
+if (
+  !DISCORD_TOKEN ||
+  !DISCORD_CLIENT_ID ||
+  !DISCORD_GUILD_ID ||
+  !MEMBER_ROLE_ID ||
+  !RULES_CHANNEL_ID
+) {
   console.error("חסר אחד או יותר ממשתני הסביבה (.env). ודא שהכל מוגדר.");
   process.exit(1);
 }
@@ -45,7 +51,9 @@ async function registerCommands() {
     {
       name: "setup-rules",
       description: "יוצר הודעת כללים עם כפתור אישור בחדר הזה",
-      default_member_permissions: PermissionFlagsBits.Administrator,
+      // כאן הייתה הבעיה – PermissionFlagsBits.Administrator הוא BigInt
+      // אפשר או להסיר לגמרי את השורה, או להפוך ל-string.
+      default_member_permissions: PermissionFlagsBits.Administrator.toString(),
     },
   ];
 
