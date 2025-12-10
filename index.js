@@ -150,4 +150,115 @@ function buildAcceptButtonRow() {
 client.on("guildMemberAdd", async (member) => {
   try {
     const rulesChannel = member.guild.channels.cache.get(RULES_CHANNEL_ID);
-    if (!rulesChannel || !rulesChannel.isTextB
+    if (!rulesChannel || !rulesChannel.isTextBased()) return;
+
+    await rulesChannel.send(
+      `ברוך הבא <@${member.id}> לשרת של **isrServ-Hosting**!\n` +
+        `כדי לקבל גישה לכל החדרים, קרא את כללי הקהילה והקליק על הכפתור **"מאשר את כללי הקהילה"** למטה.`
+    );
+  } catch (err) {
+    console.error("שגיאה בשליחת הודעת ברוכים הבאים:", err);
+  }
+});
+
+// האזנה לאינטראקציות (פקודות סלאש + כפתורים)
+client.on("interactionCreate", async (interaction) => {
+  try {
+    // פקודת סלאש
+    if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "setup-rules") {
+        // לוודא שהפקודה רצה בחדר הכללים המתאים
+        if (interaction.channelId !== RULES_CHANNEL_ID) {
+          await interaction.reply({
+            content: "הפקודה הזו צריכה לרוץ בחדר הכללים בלבד.",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const embed = buildRulesEmbed();
+        const row = buildAcceptButtonRow();
+
+        await interaction.reply({
+          content: "הודעת הכללים נשלחה לחדר.",
+          ephemeral: true,
+        });
+
+        await interaction.channel.send({
+          embeds: [embed],
+          components: [row],
+        });
+      }
+    }
+
+    // כפתור – אישור כללים
+    if (interaction.isButton() && interaction.customId === "accept_rules") {
+      const guild = interaction.guild;
+      if (!guild) {
+        await interaction.reply({
+          content: "לא ניתן לזהות את השרת. נסה שוב מתוך השרת ולא מהודעת DM.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const member = await guild.members.fetch(interaction.user.id).catch(() => null);
+      if (!member) {
+        await interaction.reply({
+          content: "לא הצלחתי לטעון את הפרופיל שלך בשרת. נסה שוב בעוד כמה שניות.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const role = guild.roles.cache.get(MEMBER_ROLE_ID);
+      if (!role) {
+        await interaction.reply({
+          content: "שגיאה: רול ה-Member לא נמצא. פנה למנהל השרת.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // אם כבר יש לו רול – לא מוסיפים שוב
+      if (member.roles.cache.has(MEMBER_ROLE_ID)) {
+        await interaction.reply({
+          content: "כבר אישרת את הכללים ויש לך גישה מלאה.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // ניסיון להוסיף את הרול
+      await member.roles.add(role);
+
+      await interaction.reply({
+        content: "תודה! אישרת את הכללים וקיבלת רול Member.",
+        ephemeral: true,
+      });
+
+      // לוג לחדר לוגים אם קיים
+      if (LOG_CHANNEL_ID) {
+        const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
+        if (logChannel && logChannel.isTextBased()) {
+          logChannel.send(
+            `✅ **${interaction.user.tag}** (${interaction.user.id}) אישר את הכללים וקיבל רול <@&${MEMBER_ROLE_ID}>.`
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.error("שגיאה בטיפול באינטראקציה:", error);
+    if (interaction.isRepliable()) {
+      try {
+        await interaction.reply({
+          content: "אירעה שגיאה בעת העיבוד. נסה שוב או פנה למנהל.",
+          ephemeral: true,
+        });
+      } catch (_) {}
+    }
+  }
+});
+
+// התחברות
+client.login(DISCORD_TOKEN);
