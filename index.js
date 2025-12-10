@@ -2,6 +2,7 @@
 // isrServ-Hosting Rules Bot
 // -------------------------
 // בוט שמחייב אישור כללים לקבלת רול Member
+// + הודעת ברוכים הבאים בחדר הכללים לכל משתמש חדש
 
 require("dotenv").config();
 const {
@@ -17,7 +18,7 @@ const {
 } = require("discord.js");
 
 // קריאת משתני סביבה
-const {
+let {
   DISCORD_TOKEN,
   DISCORD_CLIENT_ID,
   DISCORD_GUILD_ID,
@@ -26,6 +27,13 @@ const {
   LOG_CHANNEL_ID,
 } = process.env;
 
+// מנקה רווחים בטעות
+if (DISCORD_CLIENT_ID) DISCORD_CLIENT_ID = DISCORD_CLIENT_ID.trim();
+if (DISCORD_GUILD_ID) DISCORD_GUILD_ID = DISCORD_GUILD_ID.trim();
+if (MEMBER_ROLE_ID) MEMBER_ROLE_ID = MEMBER_ROLE_ID.trim();
+if (RULES_CHANNEL_ID) RULES_CHANNEL_ID = RULES_CHANNEL_ID.trim();
+if (LOG_CHANNEL_ID) LOG_CHANNEL_ID = LOG_CHANNEL_ID.trim();
+
 if (
   !DISCORD_TOKEN ||
   !DISCORD_CLIENT_ID ||
@@ -33,7 +41,7 @@ if (
   !MEMBER_ROLE_ID ||
   !RULES_CHANNEL_ID
 ) {
-  console.error("חסר אחד או יותר ממשתני הסביבה (.env). ודא שהכל מוגדר.");
+  console.error("חסר אחד או יותר ממשתני הסביבה (.env / Railway Variables). ודא שהכל מוגדר.");
   process.exit(1);
 }
 
@@ -41,7 +49,7 @@ if (
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers, // חובה כדי להוסיף רול
+    GatewayIntentBits.GuildMembers, // חובה כדי להוסיף רול ולקלוט הצטרפויות חדשות
   ],
 });
 
@@ -51,8 +59,7 @@ async function registerCommands() {
     {
       name: "setup-rules",
       description: "יוצר הודעת כללים עם כפתור אישור בחדר הזה",
-      // כאן הייתה הבעיה – PermissionFlagsBits.Administrator הוא BigInt
-      // אפשר או להסיר לגמרי את השורה, או להפוך ל-string.
+      // PermissionFlagsBits.Administrator הוא BigInt, לכן toString()
       default_member_permissions: PermissionFlagsBits.Administrator.toString(),
     },
   ];
@@ -139,91 +146,8 @@ function buildAcceptButtonRow() {
   return new ActionRowBuilder().addComponents(button);
 }
 
-// האזנה לאינטראקציות (פקודות סלאש + כפתורים)
-client.on("interactionCreate", async (interaction) => {
+// אירוע: משתמש חדש נכנס לשרת
+client.on("guildMemberAdd", async (member) => {
   try {
-    // פקודת סלאש
-    if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === "setup-rules") {
-        // לוודא שהפקודה רצה בחדר הכללים המתאים
-        if (interaction.channelId !== RULES_CHANNEL_ID) {
-          await interaction.reply({
-            content: "הפקודה הזו צריכה לרוץ בחדר הכללים בלבד.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        const embed = buildRulesEmbed();
-        const row = buildAcceptButtonRow();
-
-        await interaction.reply({
-          content: "הודעת הכללים נשלחה לחדר.",
-          ephemeral: true,
-        });
-
-        await interaction.channel.send({
-          embeds: [embed],
-          components: [row],
-        });
-      }
-    }
-
-    // כפתור
-    if (interaction.isButton()) {
-      if (interaction.customId === "accept_rules") {
-        const guild = interaction.guild;
-        const member = await guild.members.fetch(interaction.user.id);
-
-        const role = guild.roles.cache.get(MEMBER_ROLE_ID);
-        if (!role) {
-          await interaction.reply({
-            content: "שגיאה: רול ה-Member לא נמצא. פנה למנהל השרת.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        if (member.roles.cache.has(MEMBER_ROLE_ID)) {
-          await interaction.reply({
-            content: "כבר אישרת את הכללים ויש לך גישה מלאה.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        await member.roles.add(role);
-
-        await interaction.reply({
-          content: "תודה! אישרת את הכללים וקיבלת רול Member.",
-          ephemeral: true,
-        });
-
-        // לוג לחדר לוגים אם קיים
-        if (LOG_CHANNEL_ID) {
-          const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
-          if (logChannel && logChannel.isTextBased()) {
-            logChannel.send(
-              `✅ **${interaction.user.tag}** (${interaction.user.id}) אישר את הכללים וקיבל רול <@&${MEMBER_ROLE_ID}>.`
-            );
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error("שגיאה בטיפול באינטראקציה:", error);
-    if (interaction.isRepliable()) {
-      try {
-        await interaction.reply({
-          content: "אירעה שגיאה בעת העיבוד. נסה שוב או פנה למנהל.",
-          ephemeral: true,
-        });
-      } catch (_) {
-        // מתעלמים משגיאה משנית
-      }
-    }
-  }
-});
-
-// התחברות
-client.login(DISCORD_TOKEN);
+    const rulesChannel = member.guild.channels.cache.get(RULES_CHANNEL_ID);
+    if (!rulesChannel || !rulesChannel.isTextB
